@@ -184,6 +184,7 @@ Now we're at the meat of the problem: AIC scores. Afterall, what I'm hoping to g
 # Return a tidy tibble of AIC information given a list of model objects
 summarize_aic <- function(models){
   check_dep("purrr")
+  check_dep("tibble")
 
   check_models(
     tibble(
@@ -214,9 +215,11 @@ example_formulas <- list(
 
 We can now build a list of model objects and print some summary stats about these models:
 
-```{r example1_models, results = 'asis'}
+```{r example1_build}
 models <- build_model_objects(example_formulas, gapminder)
+```
 
+```{r example1_summarize, results = 'asis'}
 summarize_models(models)
 ```
 
@@ -233,15 +236,17 @@ Perfect! Now let's try something a little more interesting.
 
 Now that we know that GDP is a better predictor of life expectancy than population or the year, we can dig a little deeper. For example, perhaps the cost of healthcare has gone down over the years. If so, we would expect an interesting interaction between GDP and the year in determining life expectancy. Let's see what the data says!
 
-```{r example2_build, results = 'asis'}
+```{r example2_build}
 gdp_formulas <- list(
   no_year = lifeExp ~ gdpPercap,
   year_no_interaction = lifeExp ~ gdpPercap + year,
   year_interaction = lifeExp ~ gdpPercap * year
   )
 
-gdp_models <- build_model_objects(formulas, gapminder)
+gdp_models <- build_model_objects(gdp_formulas, gapminder)
+```
 
+```{r example2_summarize, results = 'asis'}
 summarize_models(gdp_models)
 ```
 

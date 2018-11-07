@@ -187,6 +187,7 @@ Now we're at the meat of the problem: AIC scores. Afterall, what I'm hoping to g
 # Return a tidy tibble of AIC information given a list of model objects
 summarize_aic <- function(models){
   check_dep("purrr")
+  check_dep("tibble")
 
   check_models(
     tibble(
@@ -221,7 +222,10 @@ We can now build a list of model objects and print some summary stats about thes
 
 ```r
 models <- build_model_objects(example_formulas, gapminder)
+```
 
+
+```r
 summarize_models(models)
 ```
 
@@ -277,9 +281,13 @@ summarize_aic(models) %>%
   kable
 ```
 
-```
-## Error in value[[3L]](cond): Something went wrong! Are you sure you provided a list of valid model objects?
-```
+
+
+|model |      aic| delta_aic| likelihood| aic_weight|
+|:-----|--------:|---------:|----------:|----------:|
+|pop   | 13553.08|  702.6753|          0|          0|
+|gdp   | 12850.41|    0.0000|          1|          1|
+|year  | 13201.73|  351.3222|          0|          0|
 
 Perfect! Now let's try something a little more interesting.
 
@@ -295,22 +303,63 @@ gdp_formulas <- list(
   year_interaction = lifeExp ~ gdpPercap * year
   )
 
-gdp_models <- build_model_objects(formulas, gapminder)
+gdp_models <- build_model_objects(gdp_formulas, gapminder)
 ```
 
-```
-## Error in map_chr(formulas, class): object 'formulas' not found
-```
 
 ```r
 summarize_models(gdp_models)
 ```
 
 ### Anova tables: 
+#### no_year
 
-```
-## Error in value[[3L]](cond): Something went wrong! Are you sure you provided a list of valid model objects?
-```
+|term      |     sumsq|   df| statistic| p.value|
+|:---------|---------:|----:|---------:|-------:|
+|gdpPercap |  96813.03|    1|  879.5766|       0|
+|Residuals | 187335.35| 1702|        NA|      NA|
+
+#### year_no_interaction
+
+|term      |     sumsq|   df| statistic| p.value|
+|:---------|---------:|----:|---------:|-------:|
+|gdpPercap |  70388.96|    1|  749.0705|       0|
+|year      |  27495.11|    1|  292.5995|       0|
+|Residuals | 159840.24| 1701|        NA|      NA|
+
+#### year_interaction
+
+|term           |      sumsq|   df| statistic|   p.value|
+|:--------------|----------:|----:|---------:|---------:|
+|gdpPercap      |  70388.956|    1| 754.65915| 0.0000000|
+|year           |  27495.106|    1| 294.78251| 0.0000000|
+|gdpPercap:year |   1276.969|    1|  13.69073| 0.0002224|
+|Residuals      | 158563.274| 1700|        NA|        NA|
+
+### Confidence Intervals for Coefficients: 
+#### no_year
+
+|            |      2.5 %|     97.5 %|
+|:-----------|----------:|----------:|
+|(Intercept) | 53.3377428| 54.5733790|
+|gdpPercap   |  0.0007143|  0.0008155|
+
+#### year_no_interaction
+
+|            |        2.5 %|       97.5 %|
+|:-----------|------------:|------------:|
+|(Intercept) | -472.5913974| -364.2571215|
+|gdpPercap   |    0.0006217|    0.0007177|
+|year        |    0.2115805|    0.2663851|
+
+#### year_interaction
+
+|               |        2.5 %|       97.5 %|
+|:--------------|------------:|------------:|
+|(Intercept)    | -417.3077039| -289.1373759|
+|gdpPercap      |   -0.0137499|   -0.0037585|
+|year           |    0.1735820|    0.2384198|
+|gdpPercap:year |    0.0000022|    0.0000073|
 
 Great! But which model is best? Let's use AIC to check!
 
@@ -320,9 +369,13 @@ summarize_aic(gdp_models) %>%
   kable
 ```
 
-```
-## Error in value[[3L]](cond): Something went wrong! Are you sure you provided a list of valid model objects?
-```
+
+
+|model               |      aic| delta_aic| likelihood| aic_weight|
+|:-------------------|--------:|---------:|----------:|----------:|
+|no_year             | 12850.41| 280.13621|  0.0000000|  0.0000000|
+|year_no_interaction | 12581.94|  11.66798|  0.0029264|  0.0029178|
+|year_interaction    | 12570.27|   0.00000|  1.0000000|  0.9970822|
 
 Would you look at that! It looks like there is very strong support for the inclusion of the interaction between GDP per capita and year in modelling life expectancy. Why don't we explore this visually as well?
 
@@ -339,8 +392,6 @@ gdp_models %>%
     labs(x = "GDP per Capita", y = "Life Expectancy", colour = "Model")
 ```
 
-```
-## Error in eval(lhs, parent, parent): object 'gdp_models' not found
-```
+![plot of chunk example2_plotting](figure/example2_plotting-1.png)
 
 Unfortunately, it seems that the three fits looks fairly similar visually. Nonetheless, hopefully you can see the utility of getting a single dataset of predicted variables for all the models.

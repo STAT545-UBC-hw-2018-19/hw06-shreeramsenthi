@@ -5,9 +5,9 @@ output: github_document
 ---
 
 ```{r libraries, include = F}
-library(tidyverse)
+#library(tidyverse)
 library(gapminder)
-library(knitr)
+#library(knitr)
 ```
 
 # Intro
@@ -30,7 +30,7 @@ Anyway, I thought I would make a couple functions that make this sort of analysi
 
 The first thing I like to do is build a named list of formulas to analyse. However, I don't see an obvious way of automating the construction since I basically never want to look at every possible combination of explanatory variables. So at least for now, I will start at the next step which is building model objects. But even before that, let's build some utility functions that will be useful later.
 
-### Check Dependencies
+### Utility Functions
 
 So it turns out a lot of the functions I wrote have an eclectic mix of dependencies, so rather than checking them every time and writing a relevant error message, let's functionize it!
 
@@ -38,7 +38,7 @@ So it turns out a lot of the functions I wrote have an eclectic mix of dependenc
 # Attempt to load a given package and return an error message if not installed
 check_dep <- function(package_name){
   tryCatch(
-    library(package_name, character.only = T),
+    suppressPackageStartupMessages(library(package_name, character.only = T)),
     error = function(e)
       paste0("This function requires the `", package_name, "` package to be installed. Please install it with: `install.packages('", package_name, "')` and try again!") %>%
       stop()
@@ -46,22 +46,38 @@ check_dep <- function(package_name){
 }
 ```
 
+This function takes the package name as an character argument and attempts to load it. The function also returns a more friendly error in case the package is not available. Unforunately, I couldn't find a way to intercept the error thrown by `library` for a missing package without using a `tryCatch` statement, which is pretty clunky. Notice that we don't need any error checking beyond this since this function isn't intended to be used by the end user, so we have full control of what gets passed in.
+
+Also, I also end up with a number of named lists that I would like to print. While the `print` function handles named lists pretty well, I would like to change the surrounding padding of empty lines and prefer the markdown-style header tags for separating entries. So let's build a function for that too!
+
 ```{r print_list}
+# Print a named list using markdown style header tags
 print_list <- function(list_to_print){
-  map(list_to_print, function(x){
-    cat("## ")
-    cat(names(x))
+  map2(list_to_print, names(list_to_print), function(x,y){
+    cat("#### ")
+    cat(y)
+    print(x)
     cat("\n")
-    cat(x)
     }
   )
   return()
 }
 ```
 
+Another thing I was surprised to find myself doing a lot was double checking that the user input a valid list of model objects into many of my functions. Accordingly, I built a function to check this return a friendly message. Unfortunately, I can't simply check the class of the input since each type of model has its own class name. Accordingly, I once again took to the clunky solution of `tryCatch` functions.
 
-This function takes the package name as an character argument and attempts to load it. The function also returns a more friendly error in case the package is not available. Unforunately, I couldn't find a way to intercept the error thrown by `library` for a missing package without using a `tryCatch` statement, which is pretty clunky. Notice that we don't need any error checking beyond this since this function isn't intended to be used by the end user, so we have full control of what gets passed in.
+```{r check_models}
+# Run a chunk of code and stop with a friendly error if the provided list if the input is not valid
+check_models <- function(code){
+  tryCatch(
+    result <- code,
+    error = function(e)
+      stop("Something went wrong! Are you sure you provided a list of valid model objects?")
+  )
 
+  return(result)
+}
+```
 
 ### Build Models
 
@@ -72,29 +88,25 @@ build_model_objects <- function(formulas, data, model = lm, ...){
   # Check that `purrr` is installed and loaded for the `map` family of functions
   check_dep('purrr')
 
-  # Check that both the formula and the dataset were provided
+  # Check that both the arguments without defaults were provided
   if(missing(formulas) | missing(data))
     stop("Please provide a list of formulas and a dataset")
 
-  # Check that every element of the input is a valid formula
+  # Check that every element of the formula list is a valid formula
   if(!all(map_chr(formulas, class) == "formula"))
     stop("You didn't enter a valid list of formulas.")
 
-  # Check that the model exists and is a valid function
-  # Unfortunately I don't know how to check if the function returns an arbitrary model object, so that is handled clunkily later
-  if(!exists("model") | class(model) != "function")
-    stop("You supplied an unknown model function! Did you load the relevant packages?")
-
-  # Unfortunately I also don't know how to check if the formulas are specifically valid for the given dataset. I use `tryCatch` to handle this and the previous problem
+  # Unfortunately I also don't know how to check if the formulas are specifically valid for the given dataset. I use `tryCatch` to handle this and other problems
   result <- tryCatch(
     map(formulas, model, ..., data = data),# Create and return the list of model objects
     error = function(e){ # Return an error if the model cannot be constructed
       print(e) # Print the specific error
       stop("One or more of the formulas, dataset, and model are incompatible. Please double check that:\n
-            - there are no typos in the formula,
-            - the correct dataset was provided,
-            - the model function returns a model object,
-            - that all the mandatory arguments are provided for the model.")
+            - there are no typos in the formula
+            - the correct dataset was provided
+            - the model function returns a model object
+            - the package with the model was loaded
+            - all the mandatory arguments are provided for the model")
     }
   )
 
@@ -106,65 +118,93 @@ Importantly, the function takes the list of formulas and the dataset with no def
 
 The function makes considerable use of the `map` family of functions, so I use the `library` function with the `return.logical` argument to ensure it is installed and loaded. I also do some other basic error checking on the arguments passed into the function.
 
-I did do error checking as I built this function, but I've included the error testing for all the functions down in the Testing section below.
-
 ### Summarize Models
 
 Great! Now that we've built our models, one of the first things I like to do is get a quick tabular run down of *p*-values, parameter estimates, and confidence intervals for the parameters. Let's streamline this as well.
 
 ```{r summarize_models}
 summarize_models <- function(models, ...){
+  check_dep("purrr")
   check_dep("car") # I like the `Anova` function for the choice of Sum of Square types
   check_dep("broom") # for tidy outputs in tables
   check_dep("knitr") # for pretty tables
 
-  # Print out a nice table of anova outputs
-  cat("# Anova tables: \n")
-  models %>%
-    map(Anova, ...) %>%
-    map(tidy) %>%
-    map(kable) %>%
-    print
+  check_models({
+    # Print out a nice table of anova outputs
+    cat("# Anova tables: \n")
+    models %>%
+      map(Anova, ...) %>%
+      map(tidy) %>%
+      map(kable) %>%
+      print_list
 
-  # Print out a nice table of confidence intervals
-  cat("# Confidence Intervals for Coefficients: \n")
-  models %>%
-    map(confint) %>%
-    map(kable)
+    # Print out a nice table of confidence intervals
+    cat("# Confidence Intervals for Coefficients: \n")
+    models %>%
+      map(confint) %>%
+      map(kable) %>%
+      print_list
+  })
+
+  # Don't return anything at the end
+  invisible()
 }
 ```
 
-```{r}
+Note the use of `check_dep` again. It was definitely worth functionizing! I also make use of `print_list` for the first time here to clean up the the lists of tables that are produced. The actual generation of the tables are also wrapped in a call of `check_model` in case the provided list of models is not valid. Finally, I use `invisible` at the end of the function since I do not want anything to be returned by this function.
+
+### Predictions
+
+Next, how about a tidied tibble of predicted variables? We can bind the rows together with an added column naming the model it comes from to easily plot the predictions with `ggplot2`.
+
+```{r tidy_predictions}
 tidy_predictions <- function(models){
-  models %>%
-    map(augment) %>%
-    map2(names(.), ~ mutate(.x, formula = .y)) %>%
-    bind_rows()
-}
+  check_dep("broom") # for `augment` function
+  check_dep("purrr")
+  check_dep("dplyr") # for bind_rows
 
-aic_weights <- function(models){
-  tibble(
-    model = names(models),
-    aic = map_dbl(models, AIC),
-    delta_aic = aic - min(aic),
-    likelihood = exp(-0.5 * delta_aic),
-    aic_weight = likelihood / sum(likelihood)
-    )
+  check_models(
+    models %>%
+      map(augment) %>%
+      map2(names(.), ~ mutate(.x, model_name = .y)) %>%
+      bind_rows()
+  )
 }
 ```
 
-```{r testFunctions}
+Turns out I need the `tryCatch` statements to check my input variables a lot. I probably should have made a function of that as well. Or perhaps that would be overkill? Also, nocice that I have to pass both the list of augmented tibbles and the names of this list to the `map2` function in order to create a column of model names. This helps me distinguish when model ends and the next begins after I bind the list of tibbles together in the next step. For a more concrete example of why this is more useful than a list of tibbles, see my worked example below.
+
+### AIC
+
+Now we're at the meat of the problem: AIC scores. Afterall, what I'm hoping to get out of this whole exercise is a sense of which explanatory variables are worth exploring in more detail.
+
+```{r summarize_aic}
+summarize_aic <- function(models){
+  check_models(
+    tibble(
+      model = names(models),
+      aic = map_dbl(models, AIC),
+      delta_aic = aic - min(aic),
+      likelihood = exp(-0.5 * delta_aic),
+      aic_weight = likelihood / sum(likelihood)
+      )
+  )
+}
+```
+
+This is a pretty straight forward
+
+
+```{r testFunctions, results = 'asis'}
 example_formula <- list(pop = lifeExp ~ pop,
                 gdp = lifeExp ~ gdpPercap,
                 year = lifeExp ~ year)
 
 models <- build_model_objects(example_formula, gapminder)
 
-kables <- models %>%
-  map(confint)
-
 summarize_models(models)
 
 tidy_predictions(models)
-aic_weights(models)
+
+summarize_aic(models)
 ```

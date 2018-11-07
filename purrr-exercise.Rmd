@@ -233,7 +233,7 @@ Perfect! Now let's try something a little more interesting.
 
 Now that we know that GDP is a better predictor of life expectancy than population or the year, we can dig a little deeper. For example, perhaps the cost of healthcare has gone down over the years. If so, we would expect an interesting interaction between GDP and the year in determining life expectancy. Let's see what the data says!
 
-```{r example2_build, resulsts = 'asis'}
+```{r example2_build, results = 'asis'}
 gdp_formulas <- list(
   no_year = lifeExp ~ gdpPercap,
   year_no_interaction = lifeExp ~ gdpPercap + year,

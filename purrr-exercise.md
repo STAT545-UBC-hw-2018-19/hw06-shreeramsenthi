@@ -130,6 +130,7 @@ summarize_models <- function(models, ...){
   check_dep("car") # I like the `Anova` function for the choice of Sum of Square types
   check_dep("broom") # for tidy outputs in tables
   check_dep("knitr") # for pretty tables
+  check_dep("dplyr") # for mutate_if
 
   check_models({
     # Print out a nice table of anova outputs
@@ -137,6 +138,9 @@ summarize_models <- function(models, ...){
     models %>%
       map(Anova, ...) %>%
       map(tidy) %>%
+      map(mutate_if, # Use mutate_if to convert numerics to scientific notation as needed
+        is.numeric,
+        function(x) as.character(signif(x, 3))) %>%
       map(kable) %>%
       print_list
 
@@ -144,6 +148,10 @@ summarize_models <- function(models, ...){
     cat("### Confidence Intervals for Coefficients: \n")
     models %>%
       map(confint) %>%
+      map(as_tibble) %>%
+      map(mutate_if, # as before
+        is.numeric,
+        function(x) as.character(signif(x, 3))) %>%
       map(kable) %>%
       print_list
   })
@@ -232,46 +240,46 @@ summarize_models(models)
 ### Anova tables: 
 #### pop
 
-|term      |      sumsq|   df| statistic|   p.value|
-|:---------|----------:|----:|---------:|---------:|
-|pop       |   1198.879|    1|  7.211505| 0.0073141|
-|Residuals | 282949.505| 1702|        NA|        NA|
+|term      |sumsq  |df   |statistic |p.value |
+|:---------|:------|:----|:---------|:-------|
+|pop       |1200   |1    |7.21      |0.00731 |
+|Residuals |283000 |1700 |NA        |NA      |
 
 #### gdp
 
-|term      |     sumsq|   df| statistic| p.value|
-|:---------|---------:|----:|---------:|-------:|
-|gdpPercap |  96813.03|    1|  879.5766|       0|
-|Residuals | 187335.35| 1702|        NA|      NA|
+|term      |sumsq  |df   |statistic |p.value   |
+|:---------|:------|:----|:---------|:---------|
+|gdpPercap |96800  |1    |880       |3.57e-156 |
+|Residuals |187000 |1700 |NA        |NA        |
 
 #### year
 
-|term      |     sumsq|   df| statistic| p.value|
-|:---------|---------:|----:|---------:|-------:|
-|year      |  53919.18|    1|  398.6047|       0|
-|Residuals | 230229.20| 1702|        NA|      NA|
+|term      |sumsq  |df   |statistic |p.value  |
+|:---------|:------|:----|:---------|:--------|
+|year      |53900  |1    |399       |7.55e-80 |
+|Residuals |230000 |1700 |NA        |NA       |
 
 ### Confidence Intervals for Coefficients: 
 #### pop
 
-|            |    2.5 %|   97.5 %|
-|:-----------|--------:|--------:|
-|(Intercept) | 58.60447| 59.87649|
-|pop         |  0.00000|  0.00000|
+|2.5 %    |97.5 %   |
+|:--------|:--------|
+|58.6     |59.9     |
+|2.13e-09 |1.37e-08 |
 
 #### gdp
 
-|            |      2.5 %|     97.5 %|
-|:-----------|----------:|----------:|
-|(Intercept) | 53.3377428| 54.5733790|
-|gdpPercap   |  0.0007143|  0.0008155|
+|2.5 %    |97.5 %   |
+|:--------|:--------|
+|53.3     |54.6     |
+|0.000714 |0.000815 |
 
 #### year
 
-|            |        2.5 %|       97.5 %|
-|:-----------|------------:|------------:|
-|(Intercept) | -649.0314652| -522.2729096|
-|year        |    0.2938872|    0.3579204|
+|2.5 % |97.5 % |
+|:-----|:------|
+|-649  |-522   |
+|0.294 |0.358  |
 
 While it's pretty clear from the ANOVA tables that GDP per capita is the best explanatory variable for life expectancy, let's use AIC scores to formally check which model has the most support.
 
@@ -314,52 +322,52 @@ summarize_models(gdp_models)
 ### Anova tables: 
 #### no_year
 
-|term      |     sumsq|   df| statistic| p.value|
-|:---------|---------:|----:|---------:|-------:|
-|gdpPercap |  96813.03|    1|  879.5766|       0|
-|Residuals | 187335.35| 1702|        NA|      NA|
+|term      |sumsq  |df   |statistic |p.value   |
+|:---------|:------|:----|:---------|:---------|
+|gdpPercap |96800  |1    |880       |3.57e-156 |
+|Residuals |187000 |1700 |NA        |NA        |
 
 #### year_no_interaction
 
-|term      |     sumsq|   df| statistic| p.value|
-|:---------|---------:|----:|---------:|-------:|
-|gdpPercap |  70388.96|    1|  749.0705|       0|
-|year      |  27495.11|    1|  292.5995|       0|
-|Residuals | 159840.24| 1701|        NA|      NA|
+|term      |sumsq  |df   |statistic |p.value   |
+|:---------|:------|:----|:---------|:---------|
+|gdpPercap |70400  |1    |749       |5.77e-137 |
+|year      |27500  |1    |293       |1.18e-60  |
+|Residuals |160000 |1700 |NA        |NA        |
 
 #### year_interaction
 
-|term           |      sumsq|   df| statistic|   p.value|
-|:--------------|----------:|----:|---------:|---------:|
-|gdpPercap      |  70388.956|    1| 754.65915| 0.0000000|
-|year           |  27495.106|    1| 294.78251| 0.0000000|
-|gdpPercap:year |   1276.969|    1|  13.69073| 0.0002224|
-|Residuals      | 158563.274| 1700|        NA|        NA|
+|term           |sumsq  |df   |statistic |p.value   |
+|:--------------|:------|:----|:---------|:---------|
+|gdpPercap      |70400  |1    |755       |8.54e-138 |
+|year           |27500  |1    |295       |4.69e-61  |
+|gdpPercap:year |1280   |1    |13.7      |0.000222  |
+|Residuals      |159000 |1700 |NA        |NA        |
 
 ### Confidence Intervals for Coefficients: 
 #### no_year
 
-|            |      2.5 %|     97.5 %|
-|:-----------|----------:|----------:|
-|(Intercept) | 53.3377428| 54.5733790|
-|gdpPercap   |  0.0007143|  0.0008155|
+|2.5 %    |97.5 %   |
+|:--------|:--------|
+|53.3     |54.6     |
+|0.000714 |0.000815 |
 
 #### year_no_interaction
 
-|            |        2.5 %|       97.5 %|
-|:-----------|------------:|------------:|
-|(Intercept) | -472.5913974| -364.2571215|
-|gdpPercap   |    0.0006217|    0.0007177|
-|year        |    0.2115805|    0.2663851|
+|2.5 %    |97.5 %   |
+|:--------|:--------|
+|-473     |-364     |
+|0.000622 |0.000718 |
+|0.212    |0.266    |
 
 #### year_interaction
 
-|               |        2.5 %|       97.5 %|
-|:--------------|------------:|------------:|
-|(Intercept)    | -417.3077039| -289.1373759|
-|gdpPercap      |   -0.0137499|   -0.0037585|
-|year           |    0.1735820|    0.2384198|
-|gdpPercap:year |    0.0000022|    0.0000073|
+|2.5 %    |97.5 %   |
+|:--------|:--------|
+|-417     |-289     |
+|-0.0137  |-0.00376 |
+|0.174    |0.238    |
+|2.23e-06 |7.27e-06 |
 
 Great! But which model is best? Let's use AIC to check!
 

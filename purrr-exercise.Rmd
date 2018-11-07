@@ -129,6 +129,7 @@ summarize_models <- function(models, ...){
   check_dep("car") # I like the `Anova` function for the choice of Sum of Square types
   check_dep("broom") # for tidy outputs in tables
   check_dep("knitr") # for pretty tables
+  check_dep("dplyr") # for mutate_if
 
   check_models({
     # Print out a nice table of anova outputs
@@ -136,6 +137,9 @@ summarize_models <- function(models, ...){
     models %>%
       map(Anova, ...) %>%
       map(tidy) %>%
+      map(mutate_if, # Use mutate_if to convert numerics to scientific notation as needed
+        is.numeric,
+        function(x) as.character(signif(x, 3))) %>%
       map(kable) %>%
       print_list
 
@@ -143,6 +147,10 @@ summarize_models <- function(models, ...){
     cat("### Confidence Intervals for Coefficients: \n")
     models %>%
       map(confint) %>%
+      map(as_tibble) %>%
+      map(mutate_if, # as before
+        is.numeric,
+        function(x) as.character(signif(x, 3))) %>%
       map(kable) %>%
       print_list
   })
@@ -272,3 +280,7 @@ gdp_models %>%
 ```
 
 Unfortunately, it seems that the three fits looks fairly similar visually. Nonetheless, hopefully you can see the utility of getting a single dataset of predicted variables for all the models.
+
+## Putting it all together
+
+Now that we have a collection of potentially useful functions, the next obvious step would be to put them together into a package. Conveniently, that's exactly what we'll be doing in the next assignment! See you there.

@@ -35,7 +35,7 @@ So it turns out a lot of the functions I wrote have an eclectic mix of dependenc
 # Attempt to load a given package and return an error message if not installed
 check_dep <- function(package_name){
   tryCatch(
-    library(package_name, character.only = T),
+    suppressPackageStartupMessages(library(package_name, character.only = T)),
     error = function(e)
       paste0("This function requires the `", package_name, "` package to be installed. Please install it with: `install.packages('", package_name, "')` and try again!") %>%
       stop()
@@ -45,13 +45,14 @@ check_dep <- function(package_name){
 
 This function takes the package name as an character argument and attempts to load it. The function also returns a more friendly error in case the package is not available. Unforunately, I couldn't find a way to intercept the error thrown by `library` for a missing package without using a `tryCatch` statement, which is pretty clunky. Notice that we don't need any error checking beyond this since this function isn't intended to be used by the end user, so we have full control of what gets passed in.
 
-Also, I also end up with a number of named lists that I would like to print. While the `print` function handles named lists pretty well, I would like to change the surrounding padding of empty lines and prefer the markdown-style header tags for separating entries. So let's build a function for that too!
+I also found that I end up with a lot of named lists that I would like to print. While the `print` function handles named lists pretty well, I would like to change the surrounding padding of empty lines and prefer the markdown-style header tags for separating entries. So let's build a function for that too!
 
 
 ```r
+# Print a named list using markdown style header tags
 print_list <- function(list_to_print){
   map2(list_to_print, names(list_to_print), function(x,y){
-    cat("## ")
+    cat("#### ")
     cat(y)
     print(x)
     cat("\n")
@@ -61,10 +62,11 @@ print_list <- function(list_to_print){
 }
 ```
 
-Another thing I was surprised to find myself doing a lot was double checking that the user input a valid list of model objects into many of my functions. Accordingly, I built a function to check this return a friendly message. Unfortunately, I can't simply check the class of the input since each type of model has its own class name. Accordingly, I once again took to the clunky solution of `tryCatch` functions.
+Another thing I was surprised to find myself doing a lot was double checking that the user input a valid list of model objects into many of my functions. Accordingly, I built a function to check this and return a friendly message. Unfortunately, I can't simply check the class of the input since each type of model has its own class name. Accordingly, I once again took to the clunky solution of `tryCatch` functions.
 
 
 ```r
+# Run a chunk of code and stop with a friendly error if the provided list if the input is not valid
 check_models <- function(code){
   tryCatch(
     result <- code,
@@ -82,9 +84,9 @@ Now let's get right to it! Let's build a list of models given a list of formulas
 
 
 ```r
+# Convert a list of formulas and a dataset to a list of model objects
 build_model_objects <- function(formulas, data, model = lm, ...){
-  # Check that `purrr` is installed and loaded for the `map` family of functions
-  check_dep('purrr')
+  check_dep('purrr') # for the `map` family of functions
 
   # Check that both the arguments without defaults were provided
   if(missing(formulas) | missing(data))
@@ -94,7 +96,7 @@ build_model_objects <- function(formulas, data, model = lm, ...){
   if(!all(map_chr(formulas, class) == "formula"))
     stop("You didn't enter a valid list of formulas.")
 
-  # Unfortunately I also don't know how to check if the formulas are specifically valid for the given dataset. I use `tryCatch` to handle this and other problems
+  # Check for other problems with tryCatch
   result <- tryCatch(
     map(formulas, model, ..., data = data),# Create and return the list of model objects
     error = function(e){ # Return an error if the model cannot be constructed
@@ -112,9 +114,9 @@ build_model_objects <- function(formulas, data, model = lm, ...){
 }
 ```
 
-Importantly, the function takes the list of formulas and the dataset with no defaults to build the models. By default, it will fit a linear model with `lm`, but the function should work with most functions that return a model object, such as generalized linear models with `glm` and mixed effect models with `lmerTest::lmer`. Since different models take different arguments, I use the elipses to generalize the model creation.
+Importantly, the function takes the list of formulas and the dataset with no defaults to build the models. By default, it will fit a linear model with `lm`, but the function should work with most functions that return a model object, such as generalized linear models with `glm` and mixed effect models with `lme4::lmer`. Since different models take different arguments, I use the elipses to generalize the model creation.
 
-The function makes considerable use of the `map` family of functions, so I use the `library` function with the `return.logical` argument to ensure it is installed and loaded. I also do some other basic error checking on the arguments passed into the function.
+The function makes considerable use of the `map` family of functions, so I use the `check_dep` function from before to ensure `purrr` is installed and loaded. I also do some other basic error checking on the arguments passed into the function. Unfortunately I don't know how to check if the formulas are specifically valid for the given dataset without once again resorting to `tryCatch`.
 
 ### Summarize Models
 
@@ -122,6 +124,7 @@ Great! Now that we've built our models, one of the first things I like to do is 
 
 
 ```r
+# Print tidied tables of model summary stats of a list of models
 summarize_models <- function(models, ...){
   check_dep("purrr")
   check_dep("car") # I like the `Anova` function for the choice of Sum of Square types
@@ -130,7 +133,7 @@ summarize_models <- function(models, ...){
 
   check_models({
     # Print out a nice table of anova outputs
-    cat("# Anova tables: \n")
+    cat("### Anova tables: \n")
     models %>%
       map(Anova, ...) %>%
       map(tidy) %>%
@@ -138,7 +141,7 @@ summarize_models <- function(models, ...){
       print_list
 
     # Print out a nice table of confidence intervals
-    cat("# Confidence Intervals for Coefficients: \n")
+    cat("### Confidence Intervals for Coefficients: \n")
     models %>%
       map(confint) %>%
       map(kable) %>%
@@ -158,9 +161,10 @@ Next, how about a tidied tibble of predicted variables? We can bind the rows tog
 
 
 ```r
+# Build a single tibble of predictions from a list of models
 tidy_predictions <- function(models){
-  check_dep("broom") # for `augment` function
   check_dep("purrr")
+  check_dep("broom") # for `augment` function
   check_dep("dplyr") # for bind_rows
 
   check_models(
@@ -172,7 +176,7 @@ tidy_predictions <- function(models){
 }
 ```
 
-Turns out I need the `tryCatch` statements to check my input variables a lot. I probably should have made a function of that as well. Or perhaps that would be overkill? Also, nocice that I have to pass both the list of augmented tibbles and the names of this list to the `map2` function in order to create a column of model names. This helps me distinguish when model ends and the next begins after I bind the list of tibbles together in the next step. For a more concrete example of why this is more useful than a list of tibbles, see my worked example below.
+Notice that I have to pass both the list of augmented tibbles and the names of this list to the `map2` function in order to create a column of model names. This helps me distinguish when one model ends and the next begins after I bind the list of tibbles together in the next step. For a more concrete example of why this is more useful than a list of tibbles, see my worked example below.
 
 ### AIC
 
@@ -180,7 +184,10 @@ Now we're at the meat of the problem: AIC scores. Afterall, what I'm hoping to g
 
 
 ```r
+# Return a tidy tibble of AIC information given a list of model objects
 summarize_aic <- function(models){
+  check_dep("purrr")
+
   check_models(
     tibble(
       model = names(models),
@@ -193,91 +200,193 @@ summarize_aic <- function(models){
 }
 ```
 
-This is a pretty straight forward
+This is a pretty straight forward function that calculates some AIC summary statistics and returns them organized into a tibble. See the [Fitting Models](https://www.zoology.ubc.ca/~schluter/R/fit-model/) section of Dolph Schluter's amazing [R Tips](https://www.zoology.ubc.ca/~schluter/R/) website for the formulas used to calculate delta AIC, relative likelihoods, and AIC weights.
 
+## A Toy Example
+
+Alright, well that sure was a whole lot of coding without anything pretty to look at. Let's use the `gapminder` dataset to see what these functions will look like in practise.
+
+Let's start by making an example list of formulas that attempt to explain life expectancy based on population, GDP per capita, and the year.
 
 
 ```r
-example_formula <- list(pop = lifeExp ~ pop,
-                gdp = lifeExp ~ gdpPercap,
-                year = lifeExp ~ year)
+example_formulas <- list(
+  pop = lifeExp ~ pop,
+  gdp = lifeExp ~ gdpPercap,
+  year = lifeExp ~ year)
+```
 
-models <- build_model_objects(example_formula, gapminder)
+We can now build a list of model objects and print some summary stats about these models:
+
+
+```r
+models <- build_model_objects(example_formulas, gapminder)
 
 summarize_models(models)
 ```
 
-# Anova tables: 
-## pop
+### Anova tables: 
+#### pop
 
 |term      |      sumsq|   df| statistic|   p.value|
 |:---------|----------:|----:|---------:|---------:|
 |pop       |   1198.879|    1|  7.211505| 0.0073141|
 |Residuals | 282949.505| 1702|        NA|        NA|
 
-## gdp
+#### gdp
 
 |term      |     sumsq|   df| statistic| p.value|
 |:---------|---------:|----:|---------:|-------:|
 |gdpPercap |  96813.03|    1|  879.5766|       0|
 |Residuals | 187335.35| 1702|        NA|      NA|
 
-## year
+#### year
 
 |term      |     sumsq|   df| statistic| p.value|
 |:---------|---------:|----:|---------:|-------:|
 |year      |  53919.18|    1|  398.6047|       0|
 |Residuals | 230229.20| 1702|        NA|      NA|
 
-# Confidence Intervals for Coefficients: 
-## pop
+### Confidence Intervals for Coefficients: 
+#### pop
 
 |            |    2.5 %|   97.5 %|
 |:-----------|--------:|--------:|
 |(Intercept) | 58.60447| 59.87649|
 |pop         |  0.00000|  0.00000|
 
-## gdp
+#### gdp
 
 |            |      2.5 %|     97.5 %|
 |:-----------|----------:|----------:|
 |(Intercept) | 53.3377428| 54.5733790|
 |gdpPercap   |  0.0007143|  0.0008155|
 
-## year
+#### year
 
 |            |        2.5 %|       97.5 %|
 |:-----------|------------:|------------:|
 |(Intercept) | -649.0314652| -522.2729096|
 |year        |    0.2938872|    0.3579204|
 
-```r
-tidy_predictions(models)
-```
+While it's pretty clear from the ANOVA tables that GDP per capita is the best explanatory variable for life expectancy, let's use AIC scores to formally check which model has the most support.
 
-# A tibble: 5,112 x 12
-   lifeExp    pop .fitted .se.fit .resid    .hat .sigma .cooksd .std.resid
-     <dbl>  <int>   <dbl>   <dbl>  <dbl>   <dbl>  <dbl>   <dbl>      <dbl>
- 1    28.8 8.43e6    59.3   0.319  -30.5 6.10e-4   12.9 1.71e-3      -2.37
- 2    30.3 9.24e6    59.3   0.318  -29.0 6.08e-4   12.9 1.54e-3      -2.25
- 3    32.0 1.03e7    59.3   0.317  -27.3 6.06e-4   12.9 1.36e-3      -2.12
- 4    34.0 1.15e7    59.3   0.317  -25.3 6.04e-4   12.9 1.16e-3      -1.96
- 5    36.1 1.31e7    59.3   0.316  -23.3 6.01e-4   12.9 9.79e-4      -1.80
- 6    38.4 1.49e7    59.4   0.315  -20.9 5.98e-4   12.9 7.88e-4      -1.62
- 7    39.9 1.29e7    59.3   0.316  -19.5 6.01e-4   12.9 6.88e-4      -1.51
- 8    40.8 1.39e7    59.4   0.316  -18.5 6.00e-4   12.9 6.20e-4      -1.44
- 9    41.7 1.63e7    59.4   0.315  -17.7 5.96e-4   12.9 5.62e-4      -1.37
-10    41.8 2.22e7    59.4   0.313  -17.7 5.90e-4   12.9 5.53e-4      -1.37
-# ... with 5,102 more rows, and 3 more variables: model_name <chr>,
-#   gdpPercap <dbl>, year <int>
 
 ```r
-summarize_aic(models)
+summarize_aic(models) %>%
+  kable
 ```
 
-# A tibble: 3 x 5
-  model    aic delta_aic likelihood aic_weight
-  <chr>  <dbl>     <dbl>      <dbl>      <dbl>
-1 pop   13553.      703.  2.61e-153  2.61e-153
-2 gdp   12850.        0   1.00e+  0  1.00e+  0
-3 year  13202.      351.  5.14e- 77  5.14e- 77
+
+
+|model |      aic| delta_aic| likelihood| aic_weight|
+|:-----|--------:|---------:|----------:|----------:|
+|pop   | 13553.08|  702.6753|          0|          0|
+|gdp   | 12850.41|    0.0000|          1|          1|
+|year  | 13201.73|  351.3222|          0|          0|
+
+Perfect! Now let's try something a little more interesting.
+
+## Another Example
+
+Now that we know that GDP is a better predictor of life expectancy than population or the year, we can dig a little deeper. For example, perhaps the cost of healthcare has gone down over the years. If so, we would expect an interesting interaction between GDP and the year in determining life expectancy. Let's see what the data says!
+
+
+```r
+gdp_formulas <- list(
+  no_year = lifeExp ~ gdpPercap,
+  year_no_interaction = lifeExp ~ gdpPercap + year,
+  year_interaction = lifeExp ~ gdpPercap * year
+  )
+
+gdp_models <- build_model_objects(formulas, gapminder)
+
+summarize_models(gdp_models)
+```
+
+```
+## ### Anova tables: 
+## #### no_year
+## 
+## |term      |     sumsq|   df| statistic| p.value|
+## |:---------|---------:|----:|---------:|-------:|
+## |gdpPercap |  96813.03|    1|  879.5766|       0|
+## |Residuals | 187335.35| 1702|        NA|      NA|
+## 
+## #### year_no_interaction
+## 
+## |term      |     sumsq|   df| statistic| p.value|
+## |:---------|---------:|----:|---------:|-------:|
+## |gdpPercap |  70388.96|    1|  749.0705|       0|
+## |year      |  27495.11|    1|  292.5995|       0|
+## |Residuals | 159840.24| 1701|        NA|      NA|
+## 
+## #### year_interaction
+## 
+## |term           |      sumsq|   df| statistic|   p.value|
+## |:--------------|----------:|----:|---------:|---------:|
+## |gdpPercap      |  70388.956|    1| 754.65915| 0.0000000|
+## |year           |  27495.106|    1| 294.78251| 0.0000000|
+## |gdpPercap:year |   1276.969|    1|  13.69073| 0.0002224|
+## |Residuals      | 158563.274| 1700|        NA|        NA|
+## 
+## ### Confidence Intervals for Coefficients: 
+## #### no_year
+## 
+## |            |      2.5 %|     97.5 %|
+## |:-----------|----------:|----------:|
+## |(Intercept) | 53.3377428| 54.5733790|
+## |gdpPercap   |  0.0007143|  0.0008155|
+## 
+## #### year_no_interaction
+## 
+## |            |        2.5 %|       97.5 %|
+## |:-----------|------------:|------------:|
+## |(Intercept) | -472.5913974| -364.2571215|
+## |gdpPercap   |    0.0006217|    0.0007177|
+## |year        |    0.2115805|    0.2663851|
+## 
+## #### year_interaction
+## 
+## |               |        2.5 %|       97.5 %|
+## |:--------------|------------:|------------:|
+## |(Intercept)    | -417.3077039| -289.1373759|
+## |gdpPercap      |   -0.0137499|   -0.0037585|
+## |year           |    0.1735820|    0.2384198|
+## |gdpPercap:year |    0.0000022|    0.0000073|
+```
+
+Great! But which model is best? Let's use AIC to check!
+
+
+```r
+summarize_aic(gdp_models) %>%
+  kable
+```
+
+
+
+|model               |      aic| delta_aic| likelihood| aic_weight|
+|:-------------------|--------:|---------:|----------:|----------:|
+|no_year             | 12850.41| 280.13621|  0.0000000|  0.0000000|
+|year_no_interaction | 12581.94|  11.66798|  0.0029264|  0.0029178|
+|year_interaction    | 12570.27|   0.00000|  1.0000000|  0.9970822|
+
+Would you look at that! It looks like there is very strong support for the inclusion of the interaction between GDP per capita and year in modelling life expectancy. Why don't we explore this visually as well?
+
+
+```r
+gdp_models %>%
+  tidy_predictions %>%
+  ggplot(aes(gdpPercap, lifeExp)) +
+    geom_point(alpha = 0.1) +
+    geom_smooth(aes(y = .fitted, colour = model_name), se = F, method = "lm") +
+    scale_x_log10() + # Since gdpPercap has many small values and a few that are much larger
+    theme_classic() +
+    scale_colour_hue(labels = c("GDP per capita alone", "Year included, no interaction", "Year included, with interaction")) +
+    labs(x = "GDP per Capita", y = "Life Expectancy", colour = "Model")
+```
+
+![plot of chunk example2_plotting](figure/example2_plotting-1.png)
+
+Unfortunately, it seems that the three fits looks fairly similar visually. Nonetheless, hopefully you can see the utility of getting a single dataset of predicted variables for all the models.
